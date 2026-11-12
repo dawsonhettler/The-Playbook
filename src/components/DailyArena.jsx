@@ -5,7 +5,10 @@ import {
   hasCompletedToday, 
   getTodayResults, 
   saveTodayResults, 
-  getTimeUntilMidnight 
+  getTimeUntilMidnight,
+  getPlaybookDayNumber,
+  getPlayerRank,
+  getLifetimeAverage
 } from '../utils/dailyManager';
 import { 
   Sparkles, 
@@ -29,7 +32,8 @@ import {
   Home,
   ChevronDown,
   ChevronUp,
-  TrendingUp
+  TrendingUp,
+  Shield
 } from 'lucide-react';
 
 export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats }) {
@@ -201,8 +205,15 @@ export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats
   };
 
   const handleShare = () => {
+    const dayNum = getPlaybookDayNumber();
     const avg = todayCompletedData?.avgScore || 90;
-    const text = `THE PLAYBOOK 🏛️\nTactical IQ: ${avg}/100 • Top ${Math.max(3, 100 - avg + 4)}%\nSolved 5/5 cases today\nNext case in ${timeUntilMidnight.hours}h ${timeUntilMidnight.minutes}m\ntheplaybook.app`;
+    const squares = (todayCompletedData?.scores || []).map(s => {
+      if (s.score >= 70) return '🟩';
+      if (s.score >= 40) return '🟨';
+      return '🟥';
+    }).join('');
+
+    const text = `The Playbook #${dayNum} · Tactical IQ ${avg} · ${squares} · 🔥 ${stats?.streak || 1} streak\ntheplaybook.app`;
     navigator.clipboard.writeText(text);
     setCopiedShare(true);
     setTimeout(() => setCopiedShare(false), 2500);
@@ -222,37 +233,21 @@ export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats
   const typingCircumference = 2 * Math.PI * 34;
   const typingProgress = (typingTime / 30) * typingCircumference;
 
-  // Generate precise SVG path passing through every node coordinate perfectly
-  const scoresArray = todayCompletedData?.scores?.map(s => s.score) || [80, 85, 90, 88, 95];
-  const chartWidth = 400;
-  const chartHeight = 100;
-  const points = scoresArray.map((score, i) => {
-    const x = 40 + (i * (320 / (scoresArray.length - 1 || 1)));
-    const y = 85 - (score / 100) * 70; // Map score 0-100 to Y 85-15
-    return { x, y, score };
-  });
-
-  let trajectoryPathD = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i];
-    const p1 = points[i + 1];
-    const cpX = (p0.x + p1.x) / 2;
-    trajectoryPathD += ` C ${cpX} ${p0.y}, ${cpX} ${p1.y}, ${p1.x} ${p1.y}`;
-  }
-
   // =======================================================================
-  // PLAIN. STYLE SCORECARD (Countdown Top Center, Everything Underneath)
+  // LOCKED SCORECARD SCREEN (Krillion Share + Rank Progress + vs Average)
   // =======================================================================
   if (isCompletedToday && todayCompletedData) {
     const avg = todayCompletedData.avgScore;
     const percentileBeat = Math.max(3, 100 - avg + 4);
+    const dayNum = getPlaybookDayNumber();
+    const lifetimeAvg = getLifetimeAverage();
+    const vsAvg = avg - lifetimeAvg;
+    const playerRank = getPlayerRank(avg);
 
     const prevDayKey = Object.keys(localStorage).find(k => k.startsWith('playbook_session_') && k !== `playbook_session_${getTodayKey()}`);
-    let yesterdayScore = 84;
+    let yesterdayScore = lifetimeAvg;
     if (prevDayKey) {
-      try {
-        yesterdayScore = JSON.parse(localStorage.getItem(prevDayKey))?.avgScore || 84;
-      } catch (e) {}
+      try { yesterdayScore = JSON.parse(localStorage.getItem(prevDayKey))?.avgScore || lifetimeAvg; } catch (e) {}
     }
     const diffScore = avg - yesterdayScore;
 
@@ -271,7 +266,7 @@ export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats
 
           <div className="flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel text-xs text-[#EADDC6] font-mono-code">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>SESSION #26 · LOGGED & VERIFIED</span>
+            <span>DAY #{dayNum} · OFFICIAL SCORECARD LOCKED</span>
           </div>
         </div>
 
@@ -289,19 +284,19 @@ export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats
             <span>{timeUntilMidnight.seconds}</span>
           </div>
           <p className="text-xs text-[#8C857B] font-mono-code">
-            Midnight brings 5 brand new unique terminal cases.
+            Midnight brings 5 brand new unique war-room cases.
           </p>
         </div>
 
-        {/* 2. UNDERNEATH: MAIN SCORECARD & COMPARISON */}
+        {/* 2. UNDERNEATH: MAIN SCORECARD & RANK PROGRESS */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* LEFT HERO: TACTICAL IQ & PRECISE TRADING CHART (7 Cols) */}
+          {/* LEFT HERO: TACTICAL IQ & KRILLION SHARE BUTTON (7 Cols) */}
           <div className="lg:col-span-7 glass-panel rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden">
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-mono-code uppercase tracking-[0.25em] text-[#C5A880]">
-                  TACTICAL FLIGHT LOG · SCORECARD
+                  THE PLAYBOOK #{dayNum} · SCORECARD
                 </span>
                 <div className="font-editorial text-6xl sm:text-7xl font-normal text-[#F4EFE6] mt-2 tracking-tight">
                   {avg} <span className="text-2xl font-sans font-light text-[#C5A880]">/ 100 PTS</span>
@@ -311,103 +306,74 @@ export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats
                 </p>
               </div>
 
-              <div className="text-right">
+              <div className="text-right space-y-1">
                 <span className="text-[10px] font-mono-code text-[#8C857B] block uppercase">Active Streak</span>
-                <span className="text-lg font-bold text-amber-400 flex items-center gap-1 justify-end mt-0.5 font-mono-code">
+                <span className="text-lg font-bold text-amber-400 flex items-center gap-1 justify-end font-mono-code">
                   <Flame className="w-4 h-4 fill-amber-400" />
                   {stats?.streak || 1} Days
                 </span>
+                {stats?.streakFreezes > 0 && (
+                  <span className="text-[10px] font-mono-code text-blue-300 block">
+                    🛡️ {stats.streakFreezes} Streak Freeze active
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* High-Precision Dynamic SVG Chart */}
-            <div className="p-4 bg-[#090F1E]/95 rounded-2xl border border-white/10 space-y-3 shadow-inner font-mono-code">
-              <div className="flex justify-between text-[11px] text-stone-400">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#C5A880] animate-ping"></span>
-                  <span>TRAJECTORY TELEMETRY · LIVE</span>
-                </span>
-                <span className="text-[#C5A880]">5/5 Nodes Validated</span>
+            {/* Rank Progress Bar */}
+            <div className="p-4 bg-[#090F1E]/95 rounded-2xl border border-white/10 space-y-2 font-mono-code">
+              <div className="flex justify-between text-xs">
+                <span className="text-stone-400">Rank: <strong className="text-[#F4EFE6]">{playerRank.title}</strong></span>
+                <span className="text-[#C5A880]">{playerRank.progress}% to {playerRank.next || 'Max Rank'}</span>
               </div>
-
-              <div className="relative h-28 w-full pt-2">
-                <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
-                  <line x1="0" y1="25" x2={chartWidth} y2="25" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3 3" />
-                  <line x1="0" y1="50" x2={chartWidth} y2="50" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3 3" />
-                  <line x1="0" y1="75" x2={chartWidth} y2="75" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="3 3" />
-                  
-                  <defs>
-                    <linearGradient id="chartFade" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#C5A880" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#C5A880" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  
-                  {/* Area fill under curve */}
-                  <path d={`${trajectoryPathD} L ${chartWidth} ${chartHeight} L 0 ${chartHeight} Z`} fill="url(#chartFade)" />
-                  {/* Line hitting points precisely */}
-                  <path d={trajectoryPathD} fill="none" stroke="#C5A880" strokeWidth="2.5" strokeLinecap="round" />
-                </svg>
-
-                {/* Nodes positioned over exact coordinates */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {points.map((pt, idx) => (
-                    <div 
-                      key={idx} 
-                      className="absolute flex flex-col items-center pointer-events-auto group -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: `${(pt.x / chartWidth) * 100}%`, top: `${(pt.y / chartHeight) * 100}%` }}
-                    >
-                      <div className={`w-3.5 h-3.5 rounded-full border-2 ${pt.score >= 80 ? 'bg-emerald-400 border-black' : pt.score >= 50 ? 'bg-amber-400 border-black' : 'bg-red-400 border-black'} shadow-[0_0_12px_rgba(197,168,128,0.8)]`}></div>
-                      <span className="text-[10px] text-stone-200 mt-1 font-bold bg-black/60 px-1 rounded">{pt.score}</span>
-                      <span className="text-[8px] text-stone-500">#{idx+1}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="w-full h-2 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                <div className="h-full bg-gradient-to-r from-[#C5A880] to-[#F4EFE6] transition-all duration-1000" style={{ width: `${playerRank.progress}%` }}></div>
               </div>
-
-              <p className="text-[11px] text-stone-400 font-sans italic pt-2 border-t border-white/5">
-                💡 <strong>Trajectory Read:</strong> Each node represents your exact AI score across the 5 daily scenarios.
-              </p>
             </div>
 
+            {/* Krillion Style Wordle Share Button */}
             <button
               onClick={handleShare}
-              className="w-full py-3.5 glass-button text-xs uppercase font-mono-code tracking-widest rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-4 glass-button text-xs uppercase font-mono-code tracking-widest rounded-xl flex items-center justify-center gap-2 cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
-              <span>{copiedShare ? 'Copied Scorecard! 🎉' : 'Share Result on X / LinkedIn'}</span>
+              <span>{copiedShare ? 'Copied Playbook Share Grid! 🎉' : 'Share Result (Copy Wordle Grid)'}</span>
             </button>
           </div>
 
-          {/* RIGHT COLUMN: BASELINE VS PRIOR SESSION (5 Cols) */}
+          {/* RIGHT COLUMN: VS AVERAGE & COMPARISON (5 Cols) */}
           <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
             
             <div className="glass-panel rounded-3xl p-6 space-y-4">
               <div className="text-[10px] font-mono-code uppercase tracking-widest text-[#C5A880]">
-                Baseline vs Prior Session
+                Performance vs Lifetime Average
               </div>
-              <div className="flex items-center justify-between gap-4 pt-1">
+              
+              <div className="flex items-baseline justify-between pt-1">
                 <div>
-                  <div className="text-xs text-[#8C857B] font-mono-code">Yesterday</div>
-                  <div className="font-editorial text-3xl text-stone-300">{yesterdayScore} pts</div>
+                  <div className="text-xs text-[#8C857B] font-mono-code">Lifetime Avg</div>
+                  <div className="font-editorial text-2xl text-stone-300">{lifetimeAvg} pts</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-[#C5A880] font-mono-code">Today</div>
-                  <div className="font-editorial text-3xl font-bold text-[#F4EFE6]">{avg} pts</div>
+                  <div className="text-xs text-[#C5A880] font-mono-code">+X vs Average</div>
+                  <div className={`font-editorial text-3xl font-bold font-mono-code ${vsAvg >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {vsAvg >= 0 ? `+${vsAvg}` : vsAvg} pts
+                  </div>
                 </div>
               </div>
+
               <div className="pt-2 text-xs font-mono-code text-[#C5BEB3] border-t border-white/10 flex items-center justify-between">
-                <span>Variance Delta:</span>
+                <span>vs Yesterday ({yesterdayScore} pts):</span>
                 <strong className={diffScore >= 0 ? 'text-emerald-400 font-mono-code' : 'text-amber-400 font-mono-code'}>
-                  {diffScore >= 0 ? `+${diffScore} pts higher` : `${diffScore} pts lower`}
+                  {diffScore >= 0 ? `+${diffScore} pts` : `${diffScore} pts`}
                 </strong>
               </div>
             </div>
 
             <div className="glass-panel rounded-3xl p-6 space-y-2 text-center">
-              <div className="text-xs text-[#8C857B] font-mono-code uppercase">Operator Status</div>
-              <div className="font-editorial text-2xl text-[#F4EFE6]">Active Tactical Contender</div>
-              <p className="text-xs text-[#C5BEB3]">Consistent daily runs compound your execution speed.</p>
+              <div className="text-xs text-[#8C857B] font-mono-code uppercase">Operator Standing</div>
+              <div className="font-editorial text-2xl text-[#F4EFE6]">Global Tier Active</div>
+              <p className="text-xs text-[#C5BEB3]">Daily discipline compounds your tactical intuition.</p>
             </div>
 
           </div>

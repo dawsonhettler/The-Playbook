@@ -12,28 +12,26 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GROQ_API_KEY in Vercel environment variables." });
     }
 
-    const systemPrompt = `You are a strict, precise startup venture capitalist and mentor. Evaluate the founder's proposal based on this strict rubric:
-- Vague answers with no specific action cap at a total score of 40.
-- Answers that ignore the case's stated constraints cap at a total score of 50.
-- Scores above 85 are rare and require a concrete, high-leverage plan with a clearly named tradeoff.
-- Return ONLY valid JSON with no markdown formatting, no backticks, no code blocks, and no comments.`;
-
-    const userPrompt = `COMPANY: ${caseData.company}
+    const prompt = `You are a strict, precise startup venture capitalist and mentor. Evaluate this founder proposal:
+COMPANY: ${caseData.company}
 SITUATION: ${caseData.context}
 MASTERMIND BENCHMARK: ${caseData.benchmarkMove}
 FOUNDER'S PROPOSAL: "${userText}"
 
-Evaluate the proposal and return JSON with these exact keys:
+CRITICAL GRADING INSTRUCTIONS:
+1. Judge the proposal's real-world business effectiveness, professionalism, and psychology.
+2. Assign a numerical score from 0 to 100 ("score"):
+   - If the proposal is vulgar, hostile, trolling, or violent (e.g. "fuck him", "kill everyone"), assign a score between 0 and 10.
+   - If the proposal is weak, lazy, or generic, assign a score between 35 and 60.
+   - If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98.
+3. Write a crisp 2-sentence tactical analysis ("strengthHighlight").
+4. Write a brief operational risk ("blindSpot").
+
+Return valid JSON ONLY (no markdown code blocks, no backticks):
 {
-  "diagnosis": (integer 0 to 25),
-  "action": (integer 0 to 25),
-  "tradeoffs": (integer 0 to 25),
-  "leverage": (integer 0 to 25),
-  "total": (integer 0 to 100, must equal diagnosis+action+tradeoffs+leverage),
-  "strongest_line": "(string: critical analysis of their strategy)",
-  "fatal_flaw": "(string: the main operational risk or flaw)",
-  "expert_answer": "(string: exactly 3-4 sentences detailing what a top operator would do in this exact situation)",
-  "one_skill_to_practice": "(string: specific skill to drill next)"
+  "score": 5,
+  "strengthHighlight": "Direct analysis of their strategy...",
+  "blindSpot": "A practical execution watch-out."
 }`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -45,11 +43,11 @@ Evaluate the proposal and return JSON with these exact keys:
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
+          { role: "system", content: "You are an elite VC judge. Output valid JSON only." },
+          { role: "user", content: prompt }
         ],
-        temperature: 0.2,
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
+        temperature: 0.1
       })
     });
 
@@ -60,64 +58,31 @@ Evaluate the proposal and return JSON with these exact keys:
 
     const data = await groqRes.json();
     const rawContent = data.choices[0].message.content;
+    const parsedAI = JSON.parse(rawContent);
 
-    let parsed;
-    try {
-      let cleanJson = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const firstBrace = cleanJson.indexOf('{');
-      const lastBrace = cleanJson.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
-      }
-      parsed = JSON.parse(cleanJson);
-    } catch (parseErr) {
-      // Robust JSON parsing fallback if model outputs bad syntax
-      parsed = {
-        diagnosis: 10,
-        action: 10,
-        tradeoffs: 10,
-        leverage: 10,
-        total: 40,
-        strongest_line: "Attempted to address the dilemma under pressure.",
-        fatal_flaw: "Lack of deep structural leverage or specific operational clarity.",
-        expert_answer: "A top operator would conduct a rapid customer interview to validate demand before committing capital. They would secure non-dilutive pre-sales or barter agreements to preserve runway. Finally, they would iterate on the core feedback loop within 48 hours.",
-        one_skill_to_practice: "Unit Economics & Non-Dilutive Leverage"
-      };
-    }
+    const finalScore = Math.min(100, Math.max(0, Number(parsedAI.score) || 50));
+    const baseAxis = Math.floor(finalScore / 4);
+    const remainder = finalScore - (baseAxis * 4);
 
-    // Enforce safe numerical bounds and math consistency
-    const diag = Math.min(25, Math.max(0, Number(parsed.diagnosis) || 10));
-    const act = Math.min(25, Math.max(0, Number(parsed.action) || 10));
-    const trad = Math.min(25, Math.max(0, Number(parsed.tradeoffs) || 10));
-    const lev = Math.min(25, Math.max(0, Number(parsed.leverage) || 10));
-    const total = Math.min(100, Math.max(0, diag + act + trad + lev));
-    const percentile = Math.min(99, Math.max(1, 100 - Math.round(total * 0.9)));
+    const axes = {
+      wedge: baseAxis + remainder,
+      capital: baseAxis,
+      speed: baseAxis,
+      moat: baseAxis
+    };
+
+    const percentile = Math.min(99, Math.max(1, 100 - Math.round(finalScore * 0.9)));
 
     return res.status(200).json({
-      diagnosis: diag,
-      action: act,
-      tradeoffs: trad,
-      leverage: lev,
-      total: total,
-      strongest_line: parsed.strongest_line || "Addressed the bottleneck directly.",
-      fatal_flaw: parsed.fatal_flaw || "Requires a clearer execution path.",
-      expert_answer: parsed.expert_answer || caseData.benchmarkMove,
-      one_skill_to_practice: parsed.one_skill_to_practice || "Strategic Leverage",
-      // Frontend compatibility mappings
-      totalScore: total,
-      percentile: percentile,
-      axes: {
-        wedge: diag,
-        capital: trad,
-        speed: act,
-        moat: lev
-      },
-      strengthHighlight: parsed.strongest_line,
-      blindSpot: parsed.fatal_flaw,
-      benchmarkMove: parsed.expert_answer,
-      operatorTakeaway: parsed.one_skill_to_practice
+      totalScore: finalScore,
+      percentile,
+      axes,
+      skill: caseData.skill || "operations",
+      strengthHighlight: parsedAI.strengthHighlight || "Solid tactical intent addressing the core bottleneck.",
+      blindSpot: parsedAI.blindSpot || "Ensure seamless customer execution during early rollout.",
+      benchmarkMove: caseData.benchmarkMove,
+      operatorTakeaway: caseData.operatorTakeaway
     });
-
   } catch (err) {
     return res.status(500).json({ error: err.message || "Internal server error" });
   }

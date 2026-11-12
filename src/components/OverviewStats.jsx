@@ -1,124 +1,94 @@
 import React from 'react';
-import { Award, Flame, TrendingUp, ShieldCheck, Zap, Share2 } from 'lucide-react';
+import { getSkillAverages, getWeakestSkill } from '../utils/dailyManager';
+import { Award, Flame, TrendingUp, ShieldCheck, Zap, Share2, BookOpen } from 'lucide-react';
 
-export default function OverviewStats({ stats, sessionHistory, onPlayNow }) {
-  const avgTactical = sessionHistory.length > 0
-    ? Math.round(sessionHistory.reduce((a, b) => a + b.score, 0) / sessionHistory.length)
-    : stats.avgScore || 85;
+export default function OverviewStats({ stats, sessionHistory, onPlayNow, onSwitchTab }) {
+  const skillAvgs = getSkillAverages();
+  const { weakest, score: weakestScore } = getWeakestSkill();
+
+  const skillLabels = {
+    pricing: 'Pricing Strategy',
+    positioning: 'Brand Positioning',
+    hiring: 'Team & Hiring',
+    cash_flow: 'Cash Flow & Runway',
+    conflict: 'Conflict & PR',
+    growth: 'Viral Growth & GTM',
+    operations: 'Operations & Sales'
+  };
 
   const handleShare = () => {
-    const text = `PLAYBOOK ARENA #26 🏛️\nOperator Tactical IQ: ${avgTactical}/100\nGlobal Percentile: Top ${Math.max(3, 100 - avgTactical + 4)}%\nStreak: ${stats.streak} Days 🔥\n⚡ Play at: theplaybook.app`;
+    const text = `THE PLAYBOOK 🏛️\nWeakest Skill to Drill: ${skillLabels[weakest] || weakest}\nStreak: ${stats.streak} Days 🔥\ntheplaybook.app`;
     navigator.clipboard.writeText(text);
-    alert("Scorecard copied to clipboard! Share on X or LinkedIn.");
+    alert("Skill profile copied to clipboard!");
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-6 px-4 space-y-8 animate-in fade-in duration-300">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 space-y-8 animate-fade-in-up font-sans">
       
       {/* TOP HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#EADDC6]/15 pb-4">
         <div>
-          <span className="text-[10px] uppercase tracking-widest text-[#C5A880]">Analytics & Benchmarking</span>
+          <span className="text-[10px] font-mono-code uppercase tracking-widest text-[#C5A880]">Skill Competency Matrix</span>
           <h2 className="font-editorial text-3xl sm:text-4xl text-[#F4EFE6] mt-0.5">
-            Your Founder Operator Profile
+            Founder Skill Profile & Radar
           </h2>
         </div>
 
         <button
           onClick={handleShare}
-          className="self-start sm:self-auto px-4 py-2 rounded-xl bg-[#111C35] hover:bg-[#182645] border border-[#EADDC6]/20 text-[#F4EFE6] text-xs font-semibold uppercase tracking-wider flex items-center gap-2 transition-all"
+          className="self-start sm:self-auto px-4 py-2 rounded-xl glass-panel text-xs font-mono-code text-[#F4EFE6] hover:border-[#C5A880] transition-all cursor-pointer"
         >
-          <Share2 className="w-3.5 h-3.5 text-[#C5A880]" />
-          <span>Share Profile</span>
+          <Share2 className="w-3.5 h-3.5 text-[#C5A880] inline mr-1.5" />
+          <span>Share Skill Profile</span>
         </button>
       </div>
 
-      {/* 3 HIGH-LEVEL METRICS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 bg-[#0D162B] border border-[#EADDC6]/15 rounded-2xl space-y-1">
-          <span className="text-[10px] uppercase tracking-widest text-[#8C857B]">Tactical Average</span>
-          <div className="font-editorial text-4xl text-[#F4EFE6]">{avgTactical} / 100</div>
-          <span className="text-xs text-[#C5A880] font-semibold">Across all sessions</span>
-        </div>
-
-        <div className="p-5 bg-[#0D162B] border border-[#EADDC6]/15 rounded-2xl space-y-1">
-          <span className="text-[10px] uppercase tracking-widest text-[#8C857B]">Global Percentile</span>
-          <div className="font-editorial text-4xl text-[#C5A880]">Top {Math.max(3, 100 - avgTactical + 4)}%</div>
-          <span className="text-xs text-[#8C857B]">vs. 8,400+ founder runs</span>
-        </div>
-
-        <div className="p-5 bg-[#0D162B] border border-[#EADDC6]/15 rounded-2xl space-y-1">
-          <span className="text-[10px] uppercase tracking-widest text-[#8C857B]">Daily Active Streak</span>
-          <div className="font-editorial text-4xl text-[#F4EFE6] flex items-center gap-2">
-            <span>{stats.streak} Days</span>
-            <Flame className="w-6 h-6 text-[#C5A880] fill-[#C5A880]" />
+      {/* WEAKEST SKILL CALLOUT */}
+      <div className="p-6 bg-[#0D162B] border border-amber-500/30 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+        <div className="space-y-1 text-center sm:text-left">
+          <span className="text-[10px] font-mono-code uppercase tracking-widest text-amber-400 font-semibold">
+            ⚡ Diagnostic Recommendation
+          </span>
+          <div className="font-editorial text-2xl text-[#F4EFE6]">
+            Weakest skill: <strong className="text-amber-300 capitalize">{skillLabels[weakest] || weakest}</strong> ({weakestScore} pts avg)
           </div>
-          <span className="text-xs text-[#8C857B]">Consistency multiplier active</span>
-        </div>
-      </div>
-
-      {/* 4-AXIS PERFORMANCE BREAKDOWN */}
-      <div className="bg-[#0D162B] border border-[#EADDC6]/15 rounded-2xl p-6 sm:p-8 space-y-5">
-        <div className="border-b border-[#EADDC6]/10 pb-3">
-          <span className="text-[10px] uppercase tracking-widest text-[#C5A880]">Skill Competency</span>
-          <h3 className="font-editorial text-2xl text-[#F4EFE6] mt-0.5">Tactical Dimensions</h3>
-        </div>
-
-        <div className="space-y-4 text-xs">
-          <div>
-            <div className="flex justify-between text-[#F4EFE6] font-medium mb-1.5">
-              <span>Wedge & Innovation (Finding clever, uncrowded angles)</span>
-              <span className="text-[#C5A880] font-bold">88%</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
-              <div className="h-full bg-[#C5A880]" style={{ width: '88%' }}></div>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[#F4EFE6] font-medium mb-1.5">
-              <span>Capital Preservation (Protecting runway / spending $0)</span>
-              <span className="text-[#F4EFE6] font-bold">92%</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
-              <div className="h-full bg-[#F4EFE6]" style={{ width: '92%' }}></div>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[#F4EFE6] font-medium mb-1.5">
-              <span>Speed to Validation (Execution in under 48 hours)</span>
-              <span className="text-[#C5A880] font-bold">84%</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
-              <div className="h-full bg-[#C5A880]" style={{ width: '84%' }}></div>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[#F4EFE6] font-medium mb-1.5">
-              <span>Distribution Moat (Creating non-replicable community leverage)</span>
-              <span className="text-[#F4EFE6] font-bold">78%</span>
-            </div>
-            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
-              <div className="h-full bg-[#F4EFE6]" style={{ width: '78%' }}></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* QUICK LAUNCH CALLOUT */}
-      <div className="p-6 bg-[#111C35] border border-[#EADDC6]/20 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
-          <h4 className="font-editorial text-xl text-[#F4EFE6]">Ready to calibrate your instincts?</h4>
-          <p className="text-xs text-[#C5BEB3] mt-0.5">Solve today's 5 cases with the 25s reading and 30s typing timers.</p>
+          <p className="text-xs text-[#C5BEB3]">
+            Focus your next daily runs on mastering this concept in the Improve Ideas academy.
+          </p>
         </div>
         <button
-          onClick={onPlayNow}
-          className="px-6 py-3 rounded-xl bg-[#F4EFE6] hover:bg-[#EADDC6] text-[#0A1128] font-bold text-xs uppercase tracking-wider transition-all"
+          onClick={() => onSwitchTab('tips')}
+          className="px-6 py-3 rounded-xl glass-button text-xs uppercase font-mono-code tracking-wider shrink-0 cursor-pointer"
         >
-          Enter Daily Arena ➔
+          Drill Frameworks ➔
         </button>
+      </div>
+
+      {/* 7 SKILL COMPETENCY BREAKDOWN BARS */}
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 space-y-5">
+        <div className="border-b border-white/10 pb-3 flex items-center justify-between">
+          <h3 className="font-editorial text-2xl text-[#F4EFE6]">Per-Skill Mastery Breakdown</h3>
+          <span className="text-xs font-mono-code text-[#C5A880]">7 Core Founder Pillars</span>
+        </div>
+
+        <div className="space-y-4 text-xs font-mono-code">
+          {Object.entries(skillAvgs).map(([skillKey, score]) => (
+            <div key={skillKey} className="space-y-1.5">
+              <div className="flex justify-between text-[#F4EFE6]">
+                <span className="font-medium">{skillLabels[skillKey] || skillKey}</span>
+                <span className={score >= 85 ? 'text-emerald-400 font-bold' : score >= 70 ? 'text-[#C5A880] font-bold' : 'text-amber-400 font-bold'}>
+                  {score} / 100 PTS
+                </span>
+              </div>
+              <div className="w-full h-2 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                <div 
+                  className={`h-full transition-all duration-1000 ${score >= 85 ? 'bg-emerald-400' : score >= 70 ? 'bg-[#C5A880]' : 'bg-amber-400'}`} 
+                  style={{ width: `${score}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
     </div>
