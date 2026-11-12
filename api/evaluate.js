@@ -12,26 +12,54 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GROQ_API_KEY in Vercel environment variables." });
     }
 
-    const prompt = `You are a strict, precise startup venture capitalist and mentor. Evaluate this founder proposal:
-COMPANY: ${caseData.company}
+    const cleanInput = (userText || "").trim();
+    const textLower = cleanInput.toLowerCase();
+
+    // =========================================================================
+    // LAYER 1: HARD SAFETY NET FOR PROFANITY, HOSTILITY & TROLLS
+    // =========================================================================
+    const hostileWords = ["fuck", "shit", "bitch", "ass", "kill", "murder", "hate", "stfu", "idiot", "trash", "garbage", "shut up", "asdf", "poop"];
+    const isHostile = hostileWords.some(w => new RegExp(`\\b${w}\\b`, 'i').test(textLower));
+
+    if (isHostile || textLower.length < 3) {
+      const lowScore = Math.floor(Math.random() * 6) + 2; // 2 to 7 pts
+      const baseAxis = Math.floor(lowScore / 4);
+      const remainder = lowScore - (baseAxis * 4);
+
+      return res.status(200).json({
+        totalScore: lowScore,
+        percentile: 2,
+        axes: {
+          wedge: baseAxis + remainder,
+          capital: baseAxis,
+          speed: baseAxis,
+          moat: baseAxis
+        },
+        strengthHighlight: "Hostile, vulgar, or dismissive responses alienate customers and destroy brand equity in public markets.",
+        blindSpot: "Complete failure to engage with the customer objection or provide commercial value.",
+        benchmarkMove: caseData.benchmarkMove,
+        operatorTakeaway: caseData.operatorTakeaway
+      });
+    }
+
+    // =========================================================================
+    // LAYER 2: TRUE AI GRADING VIA LLM
+    // =========================================================================
+    const systemPrompt = `You are a strict, precise startup venture capitalist and mentor. Evaluate the founder's proposal based on this rubric:
+- If the proposal is weak, lazy, or generic, assign a score between 35 and 60 ("score").
+- If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98 ("score").
+- Return valid JSON ONLY with exact keys: "score" (integer 0-100), "strengthHighlight" (string critique), "blindSpot" (string operational risk). No markdown backticks.`;
+
+    const userPrompt = `COMPANY: ${caseData.company}
 SITUATION: ${caseData.context}
 MASTERMIND BENCHMARK: ${caseData.benchmarkMove}
-FOUNDER'S PROPOSAL: "${userText}"
+FOUNDER'S PROPOSAL: "${cleanInput}"
 
-CRITICAL GRADING INSTRUCTIONS:
-1. Judge the proposal's real-world business effectiveness, professionalism, and psychology.
-2. Assign a numerical score from 0 to 100 ("score"):
-   - If the proposal is vulgar, hostile, trolling, or violent (e.g. "fuck him", "kill everyone"), assign a score between 0 and 10.
-   - If the proposal is weak, lazy, or generic, assign a score between 35 and 60.
-   - If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98.
-3. Write a crisp 2-sentence tactical analysis ("strengthHighlight").
-4. Write a brief operational risk ("blindSpot").
-
-Return valid JSON ONLY (no markdown code blocks, no backticks):
+Return JSON ONLY:
 {
-  "score": 5,
-  "strengthHighlight": "Direct analysis of their strategy...",
-  "blindSpot": "A practical execution watch-out."
+  "score": (integer 0-100),
+  "strengthHighlight": "...",
+  "blindSpot": "..."
 }`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -43,11 +71,11 @@ Return valid JSON ONLY (no markdown code blocks, no backticks):
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
         messages: [
-          { role: "system", content: "You are an elite VC judge. Output valid JSON only." },
-          { role: "user", content: prompt }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
         ],
-        response_format: { type: "json_object" },
-        temperature: 0.1
+        temperature: 0.1,
+        response_format: { type: "json_object" }
       })
     });
 
@@ -58,9 +86,21 @@ Return valid JSON ONLY (no markdown code blocks, no backticks):
 
     const data = await groqRes.json();
     const rawContent = data.choices[0].message.content;
-    const parsedAI = JSON.parse(rawContent);
 
-    const finalScore = Math.min(100, Math.max(0, Number(parsedAI.score) || 50));
+    let parsed;
+    try {
+      let cleanJson = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const firstBrace = cleanJson.indexOf('{');
+      const lastBrace = cleanJson.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(cleanJson);
+    } catch (parseErr) {
+      parsed = { score: 65, strengthHighlight: "Solid operational intent addressing the bottleneck.", blindSpot: "Ensure smooth execution." };
+    }
+
+    const finalScore = Math.min(100, Math.max(0, Number(parsed.score) || 65));
     const baseAxis = Math.floor(finalScore / 4);
     const remainder = finalScore - (baseAxis * 4);
 
@@ -77,12 +117,12 @@ Return valid JSON ONLY (no markdown code blocks, no backticks):
       totalScore: finalScore,
       percentile,
       axes,
-      skill: caseData.skill || "operations",
-      strengthHighlight: parsedAI.strengthHighlight || "Solid tactical intent addressing the core bottleneck.",
-      blindSpot: parsedAI.blindSpot || "Ensure seamless customer execution during early rollout.",
+      strengthHighlight: parsed.strengthHighlight || "Addressed the bottleneck directly.",
+      blindSpot: parsed.blindSpot || "Requires a clearer execution path.",
       benchmarkMove: caseData.benchmarkMove,
       operatorTakeaway: caseData.operatorTakeaway
     });
+
   } catch (err) {
     return res.status(500).json({ error: err.message || "Internal server error" });
   }

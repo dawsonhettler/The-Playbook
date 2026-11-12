@@ -23,27 +23,41 @@ export default defineConfig(({ mode }) => {
                 const { userText, caseData } = JSON.parse(body);
                 const rawKey = (env.AI_KEY || env.GROQ_API_KEY || env.GEMINI_API_KEY || process.env.GROQ_API_KEY || '').trim();
 
-                const prompt = `You are a strict, precise startup venture capitalist and mentor.
-Evaluate this founder proposal:
+                const cleanInput = (userText || "").trim();
+                const textLower = cleanInput.toLowerCase();
+
+                const hostileWords = ["fuck", "shit", "bitch", "ass", "kill", "murder", "hate", "stfu", "idiot", "trash", "garbage", "shut up", "asdf", "poop"];
+                const isHostile = hostileWords.some(w => new RegExp(`\\b${w}\\b`, 'i').test(textLower));
+
+                if (isHostile || textLower.length < 3) {
+                  const lowScore = Math.floor(Math.random() * 6) + 2;
+                  const baseAxis = Math.floor(lowScore / 4);
+                  const remainder = lowScore - (baseAxis * 4);
+
+                  res.statusCode = 200;
+                  res.setHeader('Content-Type', 'application/json');
+                  return res.end(JSON.stringify({
+                    totalScore: lowScore,
+                    percentile: 2,
+                    axes: { wedge: baseAxis + remainder, capital: baseAxis, speed: baseAxis, moat: baseAxis },
+                    strengthHighlight: "Hostile, vulgar, or dismissive responses alienate customers and destroy brand equity.",
+                    blindSpot: "Complete failure to engage with customer objection.",
+                    benchmarkMove: caseData.benchmarkMove,
+                    operatorTakeaway: caseData.operatorTakeaway
+                  }));
+                }
+
+                const prompt = `You are a strict startup mentor. Evaluate this founder proposal:
 COMPANY: ${caseData.company}
 SITUATION: ${caseData.context}
 MASTERMIND BENCHMARK: ${caseData.benchmarkMove}
-FOUNDER'S PROPOSAL: "${userText}"
+FOUNDER'S PROPOSAL: "${cleanInput}"
 
-CRITICAL GRADING INSTRUCTIONS:
-1. Judge the proposal's real-world business effectiveness, professionalism, and psychology.
-2. Assign a numerical score from 0 to 100 ("score"):
-   - If the proposal is vulgar, hostile, trolling, or violent (e.g. "fuck him", "kill everyone"), assign a score between 0 and 10.
-   - If the proposal is weak, lazy, or generic, assign a score between 35 and 60.
-   - If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98.
-3. Write a crisp 2-sentence tactical analysis ("strengthHighlight").
-4. Write a brief operational risk ("blindSpot").
-
-Return valid JSON ONLY (no markdown code blocks, no backticks):
+Assign a numerical score from 0 to 100 ("score"). Return valid JSON ONLY:
 {
-  "score": 5,
-  "strengthHighlight": "Direct analysis of their strategy...",
-  "blindSpot": "A practical execution watch-out."
+  "score": (integer 0-100),
+  "strengthHighlight": "...",
+  "blindSpot": "..."
 }`;
 
                 const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -66,7 +80,7 @@ Return valid JSON ONLY (no markdown code blocks, no backticks):
                 const data = await groqRes.json();
                 const parsedAI = JSON.parse(data.choices[0].message.content);
 
-                const finalScore = Math.min(100, Math.max(0, Number(parsedAI.score) || 50));
+                const finalScore = Math.min(100, Math.max(0, Number(parsedAI.score) || 65));
                 const baseAxis = Math.floor(finalScore / 4);
                 const remainder = finalScore - (baseAxis * 4);
 
