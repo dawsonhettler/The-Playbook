@@ -12,13 +12,28 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GROQ_API_KEY in Vercel environment variables." });
     }
 
-    const prompt = `You are a strict, precise startup venture mentor. Analyze this founder proposal:
+    const prompt = `You are a strict, precise startup venture capitalist and mentor.
+Evaluate this founder proposal:
 COMPANY: ${caseData.company}
 SITUATION: ${caseData.context}
 MASTERMIND BENCHMARK: ${caseData.benchmarkMove}
 FOUNDER'S PROPOSAL: "${userText}"
 
-Provide a crisp, direct 2-sentence tactical critique analyzing why this specific strategy works or where it falls short. Do not include any numbers or scores.`;
+CRITICAL GRADING INSTRUCTIONS:
+1. Judge the proposal's real-world business effectiveness, professionalism, and psychology.
+2. Assign a numerical score from 0 to 100 ("score"):
+   - If the proposal is vulgar, hostile, trolling, or violent (e.g. "fuck him", "kill everyone"), assign a score between 0 and 10.
+   - If the proposal is weak, lazy, or generic, assign a score between 35 and 60.
+   - If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98.
+3. Write a crisp 2-sentence tactical analysis ("strengthHighlight").
+4. Write a brief operational risk ("blindSpot").
+
+Return valid JSON ONLY (no markdown code blocks, no backticks):
+{
+  "score": 5,
+  "strengthHighlight": "Direct analysis of their strategy and why it works or fails.",
+  "blindSpot": "A practical execution watch-out."
+}`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -29,10 +44,11 @@ Provide a crisp, direct 2-sentence tactical critique analyzing why this specific
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
         messages: [
-          { role: "system", content: "You are an elite startup mentor. Provide crisp tactical feedback." },
+          { role: "system", content: "You are an elite VC judge. Output valid JSON only." },
           { role: "user", content: prompt }
         ],
-        temperature: 0.3
+        response_format: { type: "json_object" },
+        temperature: 0.1
       })
     });
 
@@ -42,20 +58,13 @@ Provide a crisp, direct 2-sentence tactical critique analyzing why this specific
     }
 
     const data = await groqRes.json();
-    const rawAiText = data.choices[0].message.content;
+    const rawContent = data.choices[0].message.content;
+    const parsedAI = JSON.parse(rawContent);
 
-    // Deterministic math scoring engine
-    const textLower = (userText || "").toLowerCase();
-    const isHostile = ["kill", "murder", "rob", "steal", "bomb", "punch", "asdf", "poop"].some(w => textLower.includes(w));
-    const hasLeverage = ["sample", "free", "chalkboard", "magnet", "bucket", "pastry", "video", "side-by-side", "hand", "vial", "deposit", "pre-order", "vault", "exclusive", "key"].some(w => textLower.includes(w));
-    const isLazy = ["ads", "loan", "borrow", "wait", "give up", "sue", "argue"].some(w => textLower.includes(w));
-
-    let finalScore = 72;
-    if (isHostile) finalScore = 4;
-    else if (hasLeverage && textLower.length > 5) finalScore = 94;
-    else if (isLazy) finalScore = 45;
-    else if (textLower.length < 5) finalScore = 25;
-
+    // True AI Score directly from LLM
+    const finalScore = Math.min(100, Math.max(0, Number(parsedAI.score) || 50));
+    
+    // Distribute mathematically across 4 clean sub-axes
     const baseAxis = Math.floor(finalScore / 4);
     const remainder = finalScore - (baseAxis * 4);
 
@@ -66,14 +75,14 @@ Provide a crisp, direct 2-sentence tactical critique analyzing why this specific
       moat: baseAxis
     };
 
-    const percentile = Math.min(99, Math.max(1, Math.round(finalScore * 1.02)));
+    const percentile = Math.min(99, Math.max(1, 100 - Math.round(finalScore * 0.9)));
 
     return res.status(200).json({
       totalScore: finalScore,
       percentile,
       axes,
-      strengthHighlight: rawAiText || "Solid tactical intent addressing the core bottleneck.",
-      blindSpot: "Ensure seamless customer execution during early rollout to prevent friction.",
+      strengthHighlight: parsedAI.strengthHighlight || "Solid tactical intent addressing the core bottleneck.",
+      blindSpot: parsedAI.blindSpot || "Ensure seamless customer execution during early rollout.",
       benchmarkMove: caseData.benchmarkMove,
       operatorTakeaway: caseData.operatorTakeaway
     });
