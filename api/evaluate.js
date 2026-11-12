@@ -12,55 +12,31 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Server missing GROQ_API_KEY in Vercel environment variables." });
     }
 
-    const cleanInput = (userText || "").trim();
-    const textLower = cleanInput.toLowerCase();
+    const RUBRIC = [
+      { key: "diagnosis",      label: "Diagnosis",      weight: 0.30, desc: "Did they identify the true root cause, not just a symptom?" },
+      { key: "prioritization", label: "Prioritization", weight: 0.25, desc: "Did they pick the highest-leverage move and say what NOT to do?" },
+      { key: "actionability",  label: "Actionability",  weight: 0.25, desc: "Are the next steps concrete, specific, and doable this week?" },
+      { key: "risk_metrics",   label: "Risk & Metrics", weight: 0.20, desc: "Did they name what could go wrong and how they'd measure success?" },
+    ];
 
-    // =========================================================================
-    // LAYER 1: HARD SAFETY NET FOR PROFANITY, HOSTILITY & TROLLS
-    // =========================================================================
-    const hostileWords = ["fuck", "shit", "bitch", "ass", "kill", "murder", "hate", "stfu", "idiot", "trash", "garbage", "shut up", "asdf", "poop"];
-    const isHostile = hostileWords.some(w => new RegExp(`\\b${w}\\b`, 'i').test(textLower));
+    const systemPrompt = `You are a strict, fair startup-strategy grader.
+Reason carefully about the case first: work out what the real root problem is and what an excellent answer would contain. Then judge the user's answer against that. Be skeptical: vague, generic, or buzzword-heavy answers score low.
+Quote or point to specific parts of the answer to justify each score.
+Score each category as an integer from 0 to 10 (5 = mediocre, 8+ = excellent).
 
-    if (isHostile || textLower.length < 3) {
-      const lowScore = Math.floor(Math.random() * 6) + 2; // 2 to 7 pts
-      const baseAxis = Math.floor(lowScore / 4);
-      const remainder = lowScore - (baseAxis * 4);
+Categories:
+${RUBRIC.map((r) => `- ${r.key}: ${r.desc}`).join("\n")}
 
-      return res.status(200).json({
-        totalScore: lowScore,
-        percentile: 2,
-        axes: {
-          wedge: baseAxis + remainder,
-          capital: baseAxis,
-          speed: baseAxis,
-          moat: baseAxis
-        },
-        strengthHighlight: "Hostile, vulgar, or dismissive responses alienate customers and destroy brand equity in public markets.",
-        blindSpot: "Complete failure to engage with the customer objection or provide commercial value.",
-        benchmarkMove: caseData.benchmarkMove,
-        operatorTakeaway: caseData.operatorTakeaway
-      });
-    }
-
-    // =========================================================================
-    // LAYER 2: TRUE AI GRADING VIA LLM
-    // =========================================================================
-    const systemPrompt = `You are a strict, precise startup venture capitalist and mentor. Evaluate the founder's proposal based on this rubric:
-- If the proposal is weak, lazy, or generic, assign a score between 35 and 60 ("score").
-- If the proposal is clever, empathetic, or high-leverage, assign a score between 75 and 98 ("score").
-- Return valid JSON ONLY with exact keys: "score" (integer 0-100), "strengthHighlight" (string critique), "blindSpot" (string operational risk). No markdown backticks.`;
-
-    const userPrompt = `COMPANY: ${caseData.company}
-SITUATION: ${caseData.context}
-MASTERMIND BENCHMARK: ${caseData.benchmarkMove}
-FOUNDER'S PROPOSAL: "${cleanInput}"
-
-Return JSON ONLY:
+Respond with ONLY valid JSON in exactly this shape:
 {
-  "score": (integer 0-100),
-  "strengthHighlight": "...",
-  "blindSpot": "..."
+  "ideal_answer_summary": "2 sentences on what a top answer would say",
+  "scores": { ${RUBRIC.map((r) => `"${r.key}": {"score": 0, "reason": "..."}`).join(", ")} },
+  "biggest_strength": "...",
+  "biggest_gap": "...",
+  "off_topic": false
 }`;
+
+    const userPrompt = `CASE:\nCompany: ${caseData.company}\nSector: ${caseData.sector}\nSituation: ${caseData.context}\nBenchmark: ${caseData.benchmarkMove}\n\nUSER'S ANSWER:\n${userText}`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -70,12 +46,12 @@ Return JSON ONLY:
       },
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
+        temperature: 0,
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
-        ],
-        temperature: 0.1,
-        response_format: { type: "json_object" }
+        ]
       })
     });
 
@@ -87,39 +63,53 @@ Return JSON ONLY:
     const data = await groqRes.json();
     const rawContent = data.choices[0].message.content;
 
-    let parsed;
+    let result;
     try {
       let cleanJson = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const firstBrace = cleanJson.indexOf('{');
-      const lastBrace = cleanJson.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanJson = cleanJson.substring(firstBrace, lastBrace + 1);
-      }
-      parsed = JSON.parse(cleanJson);
-    } catch (parseErr) {
-      parsed = { score: 65, strengthHighlight: "Solid operational intent addressing the bottleneck.", blindSpot: "Ensure smooth execution." };
+      const start = cleanJson.indexOf("{");
+      const end = cleanJson.lastIndexOf("}");
+      result = JSON.parse(cleanJson.slice(start, end + 1));
+    } catch (e) {
+      result = {
+        ideal_answer_summary: caseData.benchmarkMove,
+        scores: {
+          diagnosis: { score: 5, reason: "Moderate understanding of the situation." },
+          prioritization: { score: 5, reason: "Standard approach to prioritization." },
+          actionability: { score: 5, reason: "Action steps are somewhat generic." },
+          risk_metrics: { score: 5, reason: "Limited discussion of risks." }
+        },
+        biggest_strength: "Addressed the core dilemma directly.",
+        biggest_gap: "Needs more operational specificity.",
+        off_topic: false
+      };
     }
 
-    const finalScore = Math.min(100, Math.max(0, Number(parsed.score) || 65));
-    const baseAxis = Math.floor(finalScore / 4);
-    const remainder = finalScore - (baseAxis * 4);
+    // Calculate Grade exactly like grade.js
+    const rows = RUBRIC.map((r) => {
+      const raw = Number(result.scores?.[r.key]?.score);
+      const score = Math.min(10, Math.max(0, Number.isFinite(raw) ? raw : 5));
+      return { ...r, score, reason: result.scores?.[r.key]?.reason || "" };
+    });
 
+    const percent = rows.reduce((sum, r) => sum + (r.score / 10) * r.weight * 100, 0);
+    const finalScore = Math.round(percent * 10) / 10;
+    const percentile = Math.min(99, Math.max(1, Math.round(finalScore * 0.95)));
+
+    // Map 0-10 rubric scores to 0-25 axes for DailyArena.jsx UI
     const axes = {
-      wedge: baseAxis + remainder,
-      capital: baseAxis,
-      speed: baseAxis,
-      moat: baseAxis
+      wedge: Math.round((rows.find(r => r.key === 'diagnosis')?.score || 5) * 2.5),
+      capital: Math.round((rows.find(r => r.key === 'prioritization')?.score || 5) * 2.5),
+      speed: Math.round((rows.find(r => r.key === 'actionability')?.score || 5) * 2.5),
+      moat: Math.round((rows.find(r => r.key === 'risk_metrics')?.score || 5) * 2.5)
     };
-
-    const percentile = Math.min(99, Math.max(1, 100 - Math.round(finalScore * 0.9)));
 
     return res.status(200).json({
       totalScore: finalScore,
       percentile,
       axes,
-      strengthHighlight: parsed.strengthHighlight || "Addressed the bottleneck directly.",
-      blindSpot: parsed.blindSpot || "Requires a clearer execution path.",
-      benchmarkMove: caseData.benchmarkMove,
+      strengthHighlight: `${result.biggest_strength} (${rows[0].label}: ${rows[0].reason})`,
+      blindSpot: `${result.biggest_gap} (${rows[2].label}: ${rows[2].reason})`,
+      benchmarkMove: result.ideal_answer_summary,
       operatorTakeaway: caseData.operatorTakeaway
     });
 
