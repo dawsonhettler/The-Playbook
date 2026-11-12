@@ -1,0 +1,72 @@
+export const DAILY_CASES = [
+  {
+    id: "case_01",
+    caseNumber: 1,
+    company: "Liquid Death",
+    year: "2019",
+    founder: "Mike Cessario",
+    startingCapital: "$1,500",
+    industry: "Beverage & CPG",
+    headline: "Selling Free Tap Water in a Heavy Metal Tallboy",
+    dilemma: "You want to launch a canned mountain water brand that mocks energy drinks. But manufacturing an initial production run of aluminum cans costs over $250,000—money you don't have. Bottled water is a commodity and distributors laugh at your pitch deck. What is your zero-budget launch move?",
+    evalKeywords: ["video", "ad", "fake", "cgi", "render", "test", "demand", "smoke", "facebook", "social", "viral", "prototype", "distributor"],
+    actualFounderMove: "Shot a $1,500 viral Facebook commercial using a 3D animated CGI can before producing a single drop of water. The video got 3M views and forced Whole Foods to request retail distribution.",
+    operatorRule: "Smoke-Test Before Building: Never spend $250k on inventory until you prove customers will click 'Buy' on a $1,500 prototype video."
+  },
+  {
+    id: "case_02",
+    caseNumber: 2,
+    company: "Airbnb",
+    year: "2008",
+    founder: "Brian Chesky & Joe Gebbia",
+    startingCapital: "$20,000 in credit card debt",
+    industry: "Marketplaces / Travel",
+    headline: "Two Broke Designers Facing Imminent Eviction",
+    dilemma: "Airbnb had only 2 to 3 bookings a day and was bleeding cash. Maxed out on multiple credit cards, every VC in Silicon Valley rejected them. The 2008 Democratic National Convention in Denver was approaching, with hotels completely booked out. How do you save the company and get immediate cash?",
+    evalKeywords: ["cereal", "box", "obama", "hustle", "unscalable", "cash", "convention", "sell", "merchandise", "press", "pr"],
+    actualFounderMove: "Designed and hand-glued 1,000 novelty 'Obama O's' and 'Cap'n McCain's' cereal boxes, selling them for $40 each at the conventions to generate $30,000 in non-dilutive survival cash.",
+    operatorRule: "Do Things That Don't Scale: When your startup is dying, do scrappy, unscalable hustles to buy yourself one more month of runway."
+  },
+  {
+    id: "case_03",
+    caseNumber: 3,
+    company: "Gymshark",
+    year: "2013",
+    founder: "Ben Francis",
+    startingCapital: "Pizza delivery wages",
+    industry: "Athletic Apparel / DTC",
+    headline: "Sewing Gym Tracksuits by Hand in a Bedroom",
+    dilemma: "You are a 19-year-old pizza delivery driver sewing custom stretch-fit gym clothes on your grandmother's sewing machine. You have $3,000 saved. Nike and Under Armour dominate the market with multimillion-dollar athlete endorsements. How do you create explosive viral demand for your clothes?",
+    evalKeywords: ["influencer", "youtube", "creator", "free", "gift", "booth", "expo", "community", "athletes", "send", "barter"],
+    actualFounderMove: "Blew his entire $3,000 savings on a tiny booth at the UK BodyPower fitness expo and gifted free custom tracksuits to early YouTube fitness creators with zero posting obligations. The creators mobbed the booth and crashed the website.",
+    operatorRule: "Gift Authentic Creators With Zero Strings Attached: Treat creators like valued insiders rather than ad billboards, and they will become your most passionate evangelists."
+  },
+  {
+    id: "case_04",
+    caseNumber: 4,
+    company: "Red Bull",
+    year: "1987",
+    founder: "Dietrich Mateschitz",
+    startingCapital: "Modest personal savings",
+    industry: "Energy Drinks",
+    headline: "Introducing a Medicinal-Tasting Soda to Europe",
+    dilemma: "Consumers in focus groups unanimously hate your drink, calling it 'disgusting' and saying it 'tastes like medicinal cough syrup'. Traditional supermarkets refuse to carry it. Big soda conglomerates own all retail shelf space. How do you build an international empire without standard distribution?",
+    evalKeywords: ["club", "nightclub", "trash", "cans", "bar", "party", "social proof", "fomo", "underground", "niche", "raves"],
+    actualFounderMove: "Targeted late-night European nightclubs and raves. His team literally filled trash cans and gutters outside popular venues with empty Red Bull cans, manufacturing artificial social proof that forced bartenders to stock it.",
+    operatorRule: "Manufacture Social Proof in a Concentrated Niche: When launching a contrarian product, win one obsessive subculture before touching the mass market."
+  },
+  {
+    id: "case_05",
+    caseNumber: 5,
+    company: "Spanx",
+    year: "2000",
+    founder: "Sara Blakely",
+    startingCapital: "$5,000",
+    industry: "Apparel / Shapewear",
+    headline: "The Fax-Machine Saleswoman With No Business Degree",
+    dilemma: "You spent your life savings of $5,000 patenting footless pantyhose while selling fax machines door-to-door. You finally landed a 10-minute meeting with the head hosiery buyer at Neiman Marcus in Dallas. She seems completely bored and unimpressed sitting across her desk. How do you close the sale in the next 3 minutes?",
+    evalKeywords: ["bathroom", "restroom", "demo", "demonstrate", "wear", "pants", "show", "live", "before", "after", "visual"],
+    actualFounderMove: "Paused the pitch, asked the buyer into the ladies' restroom, and showed her own waistline before and after wearing the garment under white pants. The buyer ordered 3,000 units on the spot.",
+    operatorRule: "Demonstrate, Don't Explain: If your product has a 10x visual difference, never rely on PowerPoint slides or marketing jargon. Show the immediate before-and-after."
+  }
+];
