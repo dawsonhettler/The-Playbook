@@ -41,6 +41,40 @@ export function getLifetimeAverage() {
   return count > 0 ? Math.round(totalScoreSum / count) : 84;
 }
 
+export function getSkillAverages() {
+  const skillHistoryKey = 'playbook_skill_history_v1';
+  const existingSkills = JSON.parse(localStorage.getItem(skillHistoryKey) || '{}');
+  const allSkills = ['pricing', 'positioning', 'hiring', 'cash_flow', 'conflict', 'growth', 'operations'];
+  
+  const averages = {};
+  allSkills.forEach(skill => {
+    const scores = existingSkills[skill] || [];
+    if (scores.length > 0) {
+      const sum = scores.reduce((a, b) => a + b, 0);
+      averages[skill] = Math.round(sum / scores.length);
+    } else {
+      averages[skill] = 75;
+    }
+  });
+
+  return averages;
+}
+
+export function getWeakestSkill() {
+  const avgs = getSkillAverages();
+  let weakest = 'operations';
+  let minScore = 100;
+
+  Object.entries(avgs).forEach(([skill, score]) => {
+    if (score < minScore) {
+      minScore = score;
+      weakest = skill;
+    }
+  });
+
+  return { weakest, score: minScore };
+}
+
 export function hasCompletedToday() {
   const key = `playbook_session_${getTodayKey()}`;
   return localStorage.getItem(key) !== null;
@@ -62,7 +96,18 @@ export function saveTodayResults(data) {
     timestamp: Date.now()
   }));
 
-  // Streak & Streak Freeze Logic
+  const skillHistoryKey = 'playbook_skill_history_v1';
+  const existingSkills = JSON.parse(localStorage.getItem(skillHistoryKey) || '{}');
+
+  (data.scores || []).forEach(s => {
+    const skill = s.skill || 'operations';
+    if (!existingSkills[skill]) {
+      existingSkills[skill] = [];
+    }
+    existingSkills[skill].push(s.score);
+  });
+  localStorage.setItem(skillHistoryKey, JSON.stringify(existingSkills));
+
   const statsKey = 'playbook_player_stats';
   const stats = JSON.parse(localStorage.getItem(statsKey) || '{"streak": 0, "lastPlayed": "", "streakFreezes": 0}');
   
@@ -79,19 +124,17 @@ export function saveTodayResults(data) {
     } else if (stats.lastPlayed === yesterdayKey) {
       stats.streak += 1;
     } else {
-      // Check missed days for streak freeze
       const diffTime = Math.abs(new Date(todayKey) - new Date(stats.lastPlayed));
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
       if (diffDays === 2 && (stats.streakFreezes || 0) > 0) {
         stats.streakFreezes -= 1;
-        stats.streak += 1; // Saved by freeze!
+        stats.streak += 1;
       } else {
         stats.streak = 1;
       }
     }
 
-    // Earn a streak freeze every 7 consecutive days
     if (stats.streak > 0 && stats.streak % 7 === 0) {
       stats.streakFreezes = (stats.streakFreezes || 0) + 1;
     }
