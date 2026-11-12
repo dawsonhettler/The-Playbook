@@ -1,99 +1,96 @@
 import React, { useState, useEffect } from 'react';
-import { FICTIONAL_CASES } from '../data/fictionalCases';
+import { Sparkles, ArrowRight, Clock, Award, CheckCircle2, AlertTriangle, Send, Eye, Edit3, StickyNote, Compass, Flame, CornerDownRight, Home, ChevronDown, ChevronUp, Bot } from 'lucide-react';
+import { getTodayKey, hasCompletedToday, getTodayResults, saveTodayResults, getTimeUntilMidnight, getPlaybookDayNumber, getPlayerRank, getLifetimeAverage } from '../utils/dailyManager';
 import { evaluateStrategy } from '../utils/aiScorer';
-import { 
-  Sparkles, ArrowRight, Clock, Award, CheckCircle2, AlertTriangle, Send, Eye, 
-  Edit3, StickyNote, Compass, Flame, CornerDownRight, Home, ChevronDown, ChevronUp, Bot 
-} from 'lucide-react';
+import { FICTIONAL_CASES } from '../data/fictionalCases';
 
 export default function DailyArena({ onRecordScore, onSwitchTab, onGoHome, stats }) {
+  const [dailyCases, setDailyCases] = useState([]);
   const [caseIndex, setCaseIndex] = useState(0);
   const [phase, setPhase] = useState('WELCOME');
   const [readingTime, setReadingTime] = useState(25);
   const [typingTime, setTypingTime] = useState(30);
-  const [scratchpadNotes, setScratchpadNotes] = useState("");
   const [userInput, setUserInput] = useState("");
-  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [scratchpadNotes, setScratchpadNotes] = useState("");
   const [evaluationResult, setEvaluationResult] = useState(null);
-  const [sessionScores, setSessionScores] = useState([]);
+  const [isEvaluating, setIsEvaluating] = useState(false);
 
-  const activeCase = FICTIONAL_CASES[caseIndex];
-
-  // Timers
+  // Load cases
   useEffect(() => {
-    if (phase === 'READING' && readingTime > 0) {
-      const t = setInterval(() => setReadingTime(p => p - 1), 1000);
-      return () => clearInterval(t);
-    } else if (phase === 'READING' && readingTime === 0) setPhase('TYPING');
-  }, [phase, readingTime]);
+    fetch(`/api/daily-cases?date=${getTodayKey()}`)
+      .then(res => res.json())
+      .then(setDailyCases)
+      .catch(() => console.error("Failed to load cases"));
+  }, []);
 
+  const activeCase = dailyCases[caseIndex];
+
+  // Timer logic
   useEffect(() => {
-    if (phase === 'TYPING' && typingTime > 0 && !isEvaluating) {
-      const t = setInterval(() => setTypingTime(p => p - 1), 1000);
-      return () => clearInterval(t);
-    }
-  }, [phase, typingTime, isEvaluating]);
+    let interval;
+    if (phase === 'READING' && readingTime > 0) interval = setInterval(() => setReadingTime(t => t - 1), 1000);
+    else if (phase === 'READING' && readingTime === 0) setPhase('TYPING');
+    else if (phase === 'TYPING' && typingTime > 0 && !isEvaluating) interval = setInterval(() => setTypingTime(t => t - 1), 1000);
+    else if (phase === 'TYPING' && typingTime === 0) runEvaluation(userInput);
+    return () => clearInterval(interval);
+  }, [phase, readingTime, typingTime, isEvaluating]);
 
   const runEvaluation = async (text) => {
     setIsEvaluating(true);
-    try {
-      const result = await evaluateStrategy(text, activeCase);
-      setEvaluationResult(result);
-      setPhase('FEEDBACK');
-      setSessionScores(prev => [...prev, { ...result, company: activeCase.company }]);
-    } catch (err) {
-      alert("Evaluation failed. Try again.");
-    } finally {
-      setIsEvaluating(false);
-    }
+    const result = await evaluateStrategy(text, activeCase);
+    setEvaluationResult(result);
+    setPhase('FEEDBACK');
+    setIsEvaluating(false);
   };
 
+  if (!activeCase) return <div className="p-10 text-center">Loading Mission...</div>;
+
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4 space-y-6">
-      {phase === 'WELCOME' && (
-        <div className="text-center space-y-6 animate-in fade-in">
-          <h1 className="text-4xl font-editorial">Ready to begin?</h1>
-          <button onClick={() => { setPhase('READING'); setCaseIndex(0); }} className="glass-button px-8 py-3 rounded-xl">Enter Daily Arena</button>
+    <div className="w-full max-w-5xl mx-auto py-8 px-4 font-sans text-[#F4EFE6]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <button onClick={onGoHome} className="text-xs uppercase tracking-widest text-[#C5A880] flex items-center gap-2">
+          <Home className="w-4 h-4" /> Terminal Lobby
+        </button>
+        <span className="text-[10px] font-mono-code text-[#8C857B]">CASE {caseIndex + 1} OF 5</span>
+      </div>
+
+      {/* Main Container */}
+      {phase === 'READING' && (
+        <div className="glass-panel p-10 rounded-3xl animate-fade-in-up">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-editorial">{activeCase.company}</h1>
+            <p className="text-lg text-stone-300 leading-relaxed max-w-2xl mx-auto">{activeCase.context}</p>
+            <div className="text-6xl font-mono-code text-amber-500">{readingTime}s</div>
+          </div>
         </div>
       )}
 
-      {(phase === 'READING' || phase === 'TYPING') && activeCase && (
-        <div className="glass-panel p-8 rounded-3xl space-y-6 animate-in slide-in-from-bottom-4">
-          <h2 className="text-2xl font-editorial">{activeCase.company}</h2>
-          <p className="text-sm text-stone-300">{activeCase.context}</p>
-          
-          {phase === 'READING' && (
-             <div className="text-center text-4xl font-mono text-amber-500">{readingTime}s</div>
-          )}
-
-          {phase === 'TYPING' && (
-             <form onSubmit={(e) => { e.preventDefault(); runEvaluation(userInput); }}>
-                <textarea 
-                  className="w-full bg-black/50 p-4 rounded-xl border border-white/10" 
-                  value={userInput} 
-                  onChange={(e) => setUserInput(e.target.value)} 
-                />
-                <button type="submit" className="glass-button mt-4 px-6 py-2 rounded-lg">Submit Strategy</button>
-             </form>
-          )}
+      {phase === 'TYPING' && (
+        <div className="space-y-6 animate-fade-in-up">
+          <div className="glass-panel p-6 rounded-3xl">
+            <p className="text-sm text-stone-300">{activeCase.context}</p>
+            <div className="text-2xl font-mono-code mt-4 text-amber-400">{typingTime}s</div>
+          </div>
+          <textarea 
+            className="w-full h-40 bg-black/40 border border-white/10 rounded-2xl p-6 text-lg"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            placeholder="Type your strategic move here..."
+          />
+          <button onClick={() => runEvaluation(userInput)} className="glass-button w-full py-4 rounded-xl">Submit Strategy</button>
         </div>
       )}
 
       {phase === 'FEEDBACK' && evaluationResult && (
-        <div className="glass-panel p-8 rounded-3xl space-y-6 animate-in fade-in">
-          <h3 className="text-4xl font-editorial">{evaluationResult.totalScore} / 100</h3>
-          <p>{evaluationResult.strengthHighlight}</p>
-          <p className="text-amber-400">{evaluationResult.blindSpot}</p>
-          <button onClick={() => {
-            if (caseIndex < FICTIONAL_CASES.length - 1) {
-              setCaseIndex(i => i + 1);
-              setPhase('READING');
-              setReadingTime(25);
-              setTypingTime(30);
-            } else {
-              setPhase('COMPLETE');
-            }
-          }} className="glass-button px-6 py-2 rounded-lg">Next Case</button>
+        <div className="glass-panel p-8 rounded-3xl space-y-6 animate-fade-in-up">
+           <h2 className="text-5xl font-editorial">{evaluationResult.totalScore} <span className="text-2xl text-[#C5A880]">/ 100</span></h2>
+           <p className="text-lg text-stone-200">{evaluationResult.strengthHighlight}</p>
+           <p className="text-amber-300 font-bold">{evaluationResult.blindSpot}</p>
+           <button onClick={() => {
+             if (!isLastCase) { setCaseIndex(i => i+1); setPhase('READING'); setReadingTime(25); setTypingTime(30); }
+             else setPhase('COMPLETE');
+           }} className="glass-button w-full py-4 rounded-xl">Next Case</button>
         </div>
       )}
     </div>
