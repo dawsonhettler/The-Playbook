@@ -1,119 +1,55 @@
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
-  }
-
+  if (req.method !== 'POST') return res.status(405).end();
+  
   try {
-    const { userText, caseData } = req.body || {};
+    const { userText, caseData } = req.body;
     const apiKey = process.env.GROQ_API_KEY || process.env.AI_KEY;
 
-    if (!apiKey) {
-      return res.status(500).json({ error: "Server missing GROQ_API_KEY in Vercel environment variables." });
-    }
+    const prompt = `You are a strict startup venture mentor.
+Evaluate this founder proposal:
+COMPANY: ${caseData.company}
+PROPOSAL: "${userText}"
 
-    const RUBRIC = [
-      { key: "diagnosis",      label: "Diagnosis",      weight: 0.30, desc: "Did they identify the true root cause, not just a symptom?" },
-      { key: "prioritization", label: "Prioritization", weight: 0.25, desc: "Did they pick the highest-leverage move and say what NOT to do?" },
-      { key: "actionability",  label: "Actionability",  weight: 0.25, desc: "Are the next steps concrete, specific, and doable this week?" },
-      { key: "risk_metrics",   label: "Risk & Metrics", weight: 0.20, desc: "Did they name what could go wrong and how they'd measure success?" },
-    ];
+Assign a total score (0-100) and 4 sub-scores (0-25 each: wedge, capital, speed, moat).
+The 4 sub-scores MUST sum up to the total score.
+If proposal is hostile/troll, total score is 2. If weak, 30-50. If clever, 85-96.
 
-    const systemPrompt = `You are a strict, fair startup-strategy grader.
-Reason carefully about the case first: work out what the real root problem is and what an excellent answer would contain. Then judge the user's answer against that. Be skeptical: vague, generic, or buzzword-heavy answers score low.
-Quote or point to specific parts of the answer to justify each score.
-Score each category as an integer from 0 to 10 (5 = mediocre, 8+ = excellent).
-
-Categories:
-${RUBRIC.map((r) => `- ${r.key}: ${r.desc}`).join("\n")}
-
-Respond with ONLY valid JSON in exactly this shape:
+Return valid JSON ONLY (no markdown):
 {
-  "ideal_answer_summary": "2 sentences on what a top answer would say",
-  "scores": { ${RUBRIC.map((r) => `"${r.key}": {"score": 0, "reason": "..."}`).join(", ")} },
-  "biggest_strength": "...",
-  "biggest_gap": "...",
-  "off_topic": false
+  "totalScore": 88,
+  "axes": { "wedge": 22, "capital": 22, "speed": 22, "moat": 22 },
+  "strengthHighlight": "Tactical analysis here...",
+  "blindSpot": "Operational risk here..."
 }`;
-
-    const userPrompt = `CASE:\nCompany: ${caseData.company}\nSector: ${caseData.sector}\nSituation: ${caseData.context}\nBenchmark: ${caseData.benchmarkMove}\n\nUSER'S ANSWER:\n${userText}`;
 
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey.trim()}`
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "openai/gpt-oss-20b",
-        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ]
+        temperature: 0.1
       })
     });
 
-    if (!groqRes.ok) {
-      const errJson = await groqRes.json().catch(() => ({}));
-      return res.status(groqRes.status).json({ error: errJson?.error?.message || "Groq request failed." });
-    }
-
     const data = await groqRes.json();
-    const rawContent = data.choices[0].message.content;
+    const parsed = JSON.parse(data.choices[0].message.content);
 
-    let result;
-    try {
-      let cleanJson = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const start = cleanJson.indexOf("{");
-      const end = cleanJson.lastIndexOf("}");
-      result = JSON.parse(cleanJson.slice(start, end + 1));
-    } catch (e) {
-      result = {
-        ideal_answer_summary: caseData.benchmarkMove,
-        scores: {
-          diagnosis: { score: 5, reason: "Moderate understanding of the situation." },
-          prioritization: { score: 5, reason: "Standard approach to prioritization." },
-          actionability: { score: 5, reason: "Action steps are somewhat generic." },
-          risk_metrics: { score: 5, reason: "Limited discussion of risks." }
-        },
-        biggest_strength: "Addressed the core dilemma directly.",
-        biggest_gap: "Needs more operational specificity.",
-        off_topic: false
-      };
-    }
+    // DETERMINISTIC MATH OVERRIDE (Ensures consistency)
+    const t = Number(parsed.totalScore);
+    const percentile = Math.min(99, Math.max(1, Math.round(t * 0.95)));
 
-    // Calculate Grade exactly like grade.js
-    const rows = RUBRIC.map((r) => {
-      const raw = Number(result.scores?.[r.key]?.score);
-      const score = Math.min(10, Math.max(0, Number.isFinite(raw) ? raw : 5));
-      return { ...r, score, reason: result.scores?.[r.key]?.reason || "" };
-    });
-
-    const percent = rows.reduce((sum, r) => sum + (r.score / 10) * r.weight * 100, 0);
-    const finalScore = Math.round(percent * 10) / 10;
-    const percentile = Math.min(99, Math.max(1, Math.round(finalScore * 0.95)));
-
-    // Map 0-10 rubric scores to 0-25 axes for DailyArena.jsx UI
-    const axes = {
-      wedge: Math.round((rows.find(r => r.key === 'diagnosis')?.score || 5) * 2.5),
-      capital: Math.round((rows.find(r => r.key === 'prioritization')?.score || 5) * 2.5),
-      speed: Math.round((rows.find(r => r.key === 'actionability')?.score || 5) * 2.5),
-      moat: Math.round((rows.find(r => r.key === 'risk_metrics')?.score || 5) * 2.5)
-    };
-
-    return res.status(200).json({
-      totalScore: finalScore,
+    res.status(200).json({
+      totalScore: t,
       percentile,
-      axes,
-      strengthHighlight: `${result.biggest_strength} (${rows[0].label}: ${rows[0].reason})`,
-      blindSpot: `${result.biggest_gap} (${rows[2].label}: ${rows[2].reason})`,
-      benchmarkMove: result.ideal_answer_summary,
+      axes: parsed.axes,
+      strengthHighlight: parsed.strengthHighlight,
+      blindSpot: parsed.blindSpot,
+      benchmarkMove: caseData.benchmarkMove,
       operatorTakeaway: caseData.operatorTakeaway
     });
-
-  } catch (err) {
-    return res.status(500).json({ error: err.message || "Internal server error" });
+  } catch (e) {
+    res.status(500).json({ error: "Evaluation failed" });
   }
 }
